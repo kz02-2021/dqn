@@ -32,4 +32,3 @@ b_car\control.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 b_car\control.o: ../Core/Inc/gpio.h
 b_car\control.o: ../Core/Inc/main.h
 b_car\control.o: ../Core/Inc/tim.h
-b_car\control.o: ../Core/Inc/usart.h

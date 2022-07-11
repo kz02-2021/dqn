@@ -25,10 +25,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "mpu6050.h"
 #include "stdio.h"
+#include "mpu6050.h"
 #include "control.h"
 #include "encoder.h"
+#include "dqn.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -40,9 +41,8 @@
 /* USER CODE BEGIN PD */
 #define PWM_MAX 7200
 #define PWM_MIN -7200
-#define MedAngle -0.5
+#define MedAngle -1.45
 MPU6050_t MPU6050;
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -54,11 +54,13 @@ MPU6050_t MPU6050;
 
 /* USER CODE BEGIN PV */
 int Moto1,Moto2,EncoderLeft,EncoderRight,Vertical_out,Velocity_out,Turn_out,PWM_out;
+float pitch,roll,yaw; 		    //欧拉角
+short aacx,aacy,aacz;			//加速度传感器原始数据
+short gyrox,gyroy,gyroz;		//陀螺仪原始数据
+float temp;						//温度
 
-    float pitch,roll,yaw; 		    //欧拉角
-    short aacx,aacy,aacz;			//加速度传感器原始数据
-    short gyrox,gyroy,gyroz;		//陀螺仪原始数据
-    float temp;				//温度
+int Moto;
+extern int max_num;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -70,23 +72,6 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-extern float Vertical_Kp, Vertical_Kd;
-
-
-uint8_t cmd = 0;
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	if(huart->Instance == USART2){
-		if(cmd == 1){
-			printf("yes!\r\n");
-		if((float)cmd > 100000 && (float)cmd < 200000)			Vertical_Kp=(float)cmd-100000;
-		else if((float)cmd > 200000 && (float)cmd < 300000)	Vertical_Kd=(float)cmd-200000;
-		HAL_UART_Receive_IT(&huart2, &cmd, 1);
-		}
-	}
-	
-}
 /* USER CODE END 0 */
 
 /**
@@ -128,14 +113,12 @@ int main(void)
 
 HAL_TIM_Encoder_Start (&htim2 ,TIM_CHANNEL_ALL );
 HAL_TIM_Encoder_Start (&htim4 ,TIM_CHANNEL_ALL );
-HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1  );
-HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4  );
-while (MPU6050_Init(&hi2c2) == 1){}
+
+
 		HAL_TIM_Base_Start_IT (&htim3 );
 HAL_GPIO_WritePin (GPIOA ,GPIO_PIN_5,GPIO_PIN_SET );
-	
-	HAL_UART_Receive_IT(&huart2, &cmd, 1);	//bluetooth
 
+   while (MPU6050_Init(&hi2c2) == 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,12 +129,6 @@ HAL_GPIO_WritePin (GPIOA ,GPIO_PIN_5,GPIO_PIN_SET );
 
     /* USER CODE BEGIN 3 */
 
-				//if(mpu_dmp_get_data(&pitch,&roll,&yaw)==0)
-		//{
-			//temp=MPU_Get_Temperature();								//得到温度值
-		//	MPU_Get_Accelerometer(&aacx,&aacy,&aacz);	//得到加速度传感器数据
-			//MPU_Get_Gyroscope(&gyrox,&gyroy,&gyroz);	//得到陀螺仪数据					
-		//}			
 		
 		
   }
@@ -207,33 +184,55 @@ void Limit(int *motoA,int *motoB)
 	if(*motoB>PWM_MAX)*motoB=PWM_MAX;
 	if(*motoB<PWM_MIN)*motoB=PWM_MIN;
 }
-
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim ==&htim3)
 	{
+		printf("123\r\n");
 		 
 		EncoderLeft=GetEncoder(2);
 		EncoderRight=GetEncoder(4);																		//获取左右轮转速
 		
 //	HAL_GPIO_TogglePin (GPIOC ,GPIO_PIN_13 );
-		MPU6050_Read_All(&hi2c2, &MPU6050);
-			 if(MPU6050 .Ay||MPU6050 .KalmanAngleY)HAL_GPIO_WritePin (GPIOC ,GPIO_PIN_13 ,GPIO_PIN_RESET );
+		MPU6050_Read_All(&hi2c2, &MPU6050);//得到陀螺仪数据
+			 if(MPU6050.KalmanAngleX ||MPU6050 .Gyro_X_RAW){HAL_GPIO_WritePin (GPIOC ,GPIO_PIN_13 ,GPIO_PIN_RESET );HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1  );
+HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4  );}
 		else HAL_GPIO_WritePin (GPIOC ,GPIO_PIN_13 ,GPIO_PIN_SET );
-		Vertical_out=Vertical(MedAngle,MPU6050 .KalmanAngleX ,MPU6050.Gx);	//直立环计算
-		Velocity_out=Velocity(EncoderLeft,EncoderRight);							//速度环计算
-		Turn_out=Turn(MPU6050 .Gz);															  //转向环计算
-		PWM_out=Vertical_out-Vertical_Kp*Velocity_out;								//最终输出
-		Moto1=PWM_out-Turn_out;
-		Moto2=PWM_out+Turn_out;																				//计算最终输出
-		Limit(&Moto1,&Moto2);																					//PWM限幅
-		Load (Moto1,Moto2);
-		printf ("%f\r\n",MPU6050.KalmanAngleX);
-		HAL_UART_Transmit(&huart2,"dongxiaodong\r\n",strlen("dongxiaodong\r\n"),0xFFFF);
+		if (1){		// my_main(MPU6050.KalmanAngleX,MPU6050.Gyro_X_RAW) || 
+			Vertical_out=Vertical(MedAngle,MPU6050.KalmanAngleX,MPU6050.Gyro_X_RAW+253);	//直立环计算
+			Velocity_out=Velocity(0, EncoderLeft,EncoderRight);							//速度环计算
+			Turn_out=Turn(MPU6050 .Gyro_Z_RAW, 0);														  //转向环计算
+			PWM_out=Vertical_out-Velocity_out;								//最终输出
+			Moto1=PWM_out-Turn_out;
+			Moto2=PWM_out+Turn_out;											//计算最终输出
+		}
+		else{
+			switch (max_num){		// 5
+				case 0: Moto = -6000; break;
+				case 1: Moto = -1000; break;
+				case 2: Moto = -100; break;
+				case 3: Moto = -40; break;
+				case 4: Moto = -10; break;
+				case 5: Moto = 0; break;
+				case 6: Moto = 10; break;
+				case 7: Moto = 40; break; 
+				case 8: Moto = 100; break;
+				case 9: Moto = 1000; break;
+				case 10: Moto = 6000; break;
+				default: Moto = 0;
+			}
+			Moto1 = Moto;
+			Moto2 = Moto;
+		}
+		Limit(&Moto1,&Moto2);
+		if(MPU6050.KalmanAngleX >40||MPU6050.KalmanAngleX <-40) {Moto1 =0;Moto2 =0;}		//PWM限幅
+		Load (Moto1 ,Moto2  );
+//		printf ("LEFT:%d\n",EncoderLeft);
+//		printf ("RIGHT:%d\n",EncoderRight);
+		
 	}
 
 }
-
 int fputc(int ch,FILE *f)
 {
 HAL_UART_Transmit (&huart2  ,(uint8_t *)&ch,1,HAL_MAX_DELAY );
@@ -241,7 +240,6 @@ HAL_UART_Transmit (&huart2  ,(uint8_t *)&ch,1,HAL_MAX_DELAY );
 return ch;
 
 }
-
 /* USER CODE END 4 */
 
 /**

@@ -33,7 +33,11 @@ b_car\main.o: ../Core/Inc/i2c.h
 b_car\main.o: ../Core/Inc/tim.h
 b_car\main.o: ../Core/Inc/usart.h
 b_car\main.o: ../Core/Inc/gpio.h
-b_car\main.o: ..\Hardware\Src\mpu6050.h
 b_car\main.o: D:\MyProgram\aworking\kz\keil\KeilV5\ARM\ARMCC\Bin\..\include\stdio.h
+b_car\main.o: ../Hardware/Src/mpu6050.h
 b_car\main.o: ../Hardware/control.h
 b_car\main.o: ../Hardware/encoder.h
+b_car\main.o: ../Hardware/dqn.h
+b_car\main.o: D:\MyProgram\aworking\kz\keil\KeilV5\ARM\ARMCC\Bin\..\include\math.h
+b_car\main.o: D:\MyProgram\aworking\kz\keil\KeilV5\ARM\ARMCC\Bin\..\include\stdlib.h
+b_car\main.o: D:\MyProgram\aworking\kz\keil\KeilV5\ARM\ARMCC\Bin\..\include\time.h
